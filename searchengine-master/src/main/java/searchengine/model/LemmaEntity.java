@@ -1,7 +1,9 @@
 package searchengine.model;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 
 import javax.persistence.*;
 import java.util.HashSet;
@@ -12,13 +14,9 @@ import java.util.Set;
 @Getter
 @Table(name = "lemma")
 public class LemmaEntity {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
-
-    @OneToMany(mappedBy = "lemmaEntity", fetch = FetchType.LAZY, orphanRemoval = true, cascade = CascadeType.ALL)
-    private Set<IndexEntity> indexes = new HashSet<>();
+    private long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "site_id", nullable = false)
@@ -30,4 +28,8 @@ public class LemmaEntity {
     @Column(nullable = false)
     private int frequency;
 
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @OneToMany(mappedBy = "lemmaEntity", fetch = FetchType.LAZY, orphanRemoval = true, cascade = CascadeType.ALL)
+    private Set<IndexEntity> indexes = new HashSet<>();
 }

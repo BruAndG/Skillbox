@@ -1,15 +1,7 @@
 package searchengine.services;
 
-import org.springframework.stereotype.Service;
-import searchengine.config.Site;
-import searchengine.model.SiteEntity;
-import searchengine.model.StatusType;
-
-import java.time.LocalDateTime;
-
-@Service
 public class Utils {
-    public String getRegexToFilterUrl(String url) {
+    public static String getRegexToFilterUrl(String url) {
         if (!url.startsWith("http")) {
             return null;
         }
@@ -34,19 +26,7 @@ public class Utils {
         return result.toString();
     }
 
-    public boolean isCorrectDomain(String url, String regex) {
+    public static boolean isCorrectDomain(String url, String regex) {
         return ((regex == null) || url.matches(regex));
     }
-
-    public SiteEntity createSiteEntity(Site site, StatusType statusType) {
-        SiteEntity newSite = new SiteEntity();
-
-        newSite.setName(site.getName());
-        newSite.setUrl(site.getUrl());
-        newSite.setStatus(statusType);
-        newSite.setStatusTime(LocalDateTime.now());
-
-        return newSite;
-    }
-
 }

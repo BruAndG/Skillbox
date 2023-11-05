@@ -46,7 +46,7 @@ public class SearchingServiceImpl implements SearchingService {
         return percent * count / 100;
     }
 
-    private Integer getSiteId(String site) {
+    private Long getSiteId(String site) {
         if (site == null) {
             return null;
         }
@@ -57,7 +57,7 @@ public class SearchingServiceImpl implements SearchingService {
         return null;
     }
 
-    private int getCountPages(Integer siteId) {
+    private int getCountPages(Long siteId) {
         if (siteId == null) {
             return (int) pageRepository.count();
         }
@@ -125,7 +125,7 @@ public class SearchingServiceImpl implements SearchingService {
     }
 
     private Set<LemmaEntity> getLemmaSorted(Set<String> lemmasFromUser, int minCountPagesToExcludeLemmas
-            , Integer siteId) {
+            , Long siteId) {
         Set<LemmaEntity> lemmasSorted = new TreeSet<>(new Comparator<LemmaEntity>() {
             @Override
             public int compare(LemmaEntity o1, LemmaEntity o2) {
@@ -223,7 +223,7 @@ public class SearchingServiceImpl implements SearchingService {
                 searchingData.setSite(siteEntity.getUrl());
                 searchingData.setSiteName(siteEntity.getName());
                 searchingData.setUri(pageEntity.getPath());
-                Document document  = Jsoup.parse(pageEntity.getContent());
+                Document document = Jsoup.parse(pageEntity.getContent());
                 searchingData.setTitle(document.title());
 
                 String snippet =
@@ -266,7 +266,7 @@ public class SearchingServiceImpl implements SearchingService {
                 return responseServ;
             }
 
-            Integer siteId = getSiteId(site);
+            Long siteId = getSiteId(site);
             int countPages = getCountPages(siteId);
             int minCountPagesToExcludeLemmas =
                     calcMinCountPagesToExcludeLemmas(otherSettings.getMinPercentagePagesToExcludeLemmas(), countPages);

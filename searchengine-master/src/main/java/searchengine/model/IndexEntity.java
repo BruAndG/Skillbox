@@ -11,10 +11,9 @@ import javax.persistence.*;
 @Table(name = "`index`")
 @NamedEntityGraph(name = "IndexEntity.lemmaEntity", attributeNodes = @NamedAttributeNode("lemmaEntity"))
 public class IndexEntity {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "page_id", nullable = false)
@@ -25,6 +24,5 @@ public class IndexEntity {
     private LemmaEntity lemmaEntity;
 
     @Column(name = "`rank`", nullable = false)
-    private float rank;
-
+    private long rank;
 }

@@ -1,6 +1,5 @@
 package searchengine.services;
 
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.springframework.http.HttpStatus;
@@ -18,18 +17,15 @@ import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
-import javax.transaction.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class IndexingServiceImpl implements IndexingService {
-
     private final SitesList sites;
-    private final JsoupConnectConfig jsoupConnectConfig;
     private final OtherSettings otherSettings;
-
+    private final JsoupConnectConfig jsoupConnectConfig;
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
     private final LemmaRepository lemmaRepository;
@@ -38,9 +34,6 @@ public class IndexingServiceImpl implements IndexingService {
     private final LuceneMorphology luceneMorphology;
     private LemmaFinder lemmaFinder = null;
 
-    private final Utils utils;
-
-    @Getter
     private volatile boolean stopIndexingProcess;
 
     private LemmaFinder getLemmaFinder() {
@@ -50,124 +43,47 @@ public class IndexingServiceImpl implements IndexingService {
         return lemmaFinder;
     }
 
-    private List<SiteEntity> getSiteByStatus(StatusType status) {
-        return siteRepository.findByStatus(status);
+    private IndexingResponseServ createResponse(HttpStatus httpStatus, String errorMessage) {
+        IndexingResponseServ responseServ = new IndexingResponseServ();
+        IndexingResponse response = new IndexingResponse();
+        responseServ.setIndexingResponse(response);
+        responseServ.setStatus(httpStatus);
+        response.setResult(httpStatus.equals(HttpStatus.OK));
+        response.setError(errorMessage);
+
+        return responseServ;
     }
 
-    private boolean isEqualsStatus(List<SiteEntity> siteEntityList, StatusType status) {
-        for (SiteEntity siteEntity : siteEntityList) {
-            if (siteEntity.getStatus() == status) {
-                return true;
-            }
-        }
-        return false;
-    }
+    private List<Site> getListForIndexing() {
 
-    private void deleteListSiteEntity(List<SiteEntity> siteEntityList) {
-        for (SiteEntity siteEntity : siteEntityList) {
-            siteRepository.delete(siteEntity);
-        }
-    }
-
-    @Transactional
-    private List<SiteEntity> getListForIndexing() {
-
-        List<SiteEntity> result = new ArrayList<>();
+        List<Site> result = new ArrayList<>();
 
         List<Site> sitesList = sites.getSites();
         for (Site site : sitesList) {
-            boolean isNewRow = false;
             List<SiteEntity> siteEntityList = siteRepository.findByUrl(site.getUrl()); //getSiteByUrl(site);
-            if ((siteEntityList == null) || (siteEntityList.size() == 0)) {
-                isNewRow = true;
-            } else if (!isEqualsStatus(siteEntityList, StatusType.INDEXING)) {
-                deleteListSiteEntity(siteEntityList);
-                isNewRow = true;
+            boolean suitableForIndexing = siteEntityList.isEmpty();
+            for (SiteEntity siteEntity : siteEntityList) {
+                if (!siteEntity.getStatus().equals(StatusType.INDEXING)) {
+                    suitableForIndexing = true;
+                    break;
+                }
             }
-            if (isNewRow) {
-                SiteEntity newSite = utils.createSiteEntity(site, StatusType.INDEXING); // createSiteEntity(site);
-                result.add(newSite);
-                siteRepository.save(newSite);
+            if (suitableForIndexing) {
+                result.add(site);
             }
         }
 
         return result;
     }
 
-    @Override
-    public IndexingResponseServ startIndexing() {
-        IndexingResponseServ responseServ = new IndexingResponseServ();
-        IndexingResponse response;
-        try {
-            stopIndexingProcess = false;
-
-            List<SiteEntity> listForIndexing;
-            synchronized (this) {
-                listForIndexing = getListForIndexing();
-            }
-
-            boolean isRun = listForIndexing.size() > 0;
-
-            if (isRun) {
-                for (SiteEntity siteEntity : listForIndexing) {
-                    new Thread(
-                            new SiteHandler(siteEntity, siteRepository, pageRepository, lemmaRepository, indexRepository
-                                    , jsoupConnectConfig, otherSettings, this, getLemmaFinder(), utils)
-                    ).start();
-                }
-
-                response = getResponse(true, null);
-                responseServ.setStatus(HttpStatus.OK);
-            } else {
-                response = getResponse(false, otherSettings.getErrorMessageIsAlreadyStarted());
-                responseServ.setStatus(HttpStatus.NOT_FOUND);
-            }
-
-        } catch (Exception e) {
-            response = getResponse(false, e.getLocalizedMessage());
-            responseServ.setStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-        responseServ.setIndexingResponse(response);
-
-        return responseServ;
-    }
-
-    @Override
-    public IndexingResponseServ stopIndexing() {
-        IndexingResponseServ responseServ = new IndexingResponseServ();
-        IndexingResponse response;
-        try {
-            List<SiteEntity> listIndexing = getSiteByStatus(StatusType.INDEXING);
-            boolean isRun = (listIndexing != null) && (listIndexing.size() > 0);
-            stopIndexingProcess = true;
-            if (isRun) {
-                response = getResponse(true, null);
-                responseServ.setStatus(HttpStatus.OK);
-            } else {
-                response = getResponse(false, otherSettings.getErrorMessageIsNotRunning());
-                responseServ.setStatus(HttpStatus.NOT_FOUND);
-            }
-        } catch (Exception e) {
-            response = getResponse(false, e.getLocalizedMessage());
-            responseServ.setStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-        responseServ.setIndexingResponse(response);
-
-        return responseServ;
-    }
-
-    /*
-    Поиск сайта в конфиг. файле
-     */
     private Site findSite(String url) {
-        //Utils utils = new Utils();
         Site rootSite = null;
 
         // поиск сайта
         List<Site> sitesList = sites.getSites();
         for (Site site : sitesList) {
-            String regexUrlFilter = utils.getRegexToFilterUrl(site.getUrl());
-            if (utils.isCorrectDomain(url, regexUrlFilter)) {
+            String regexUrlFilter = Utils.getRegexToFilterUrl(site.getUrl());
+            if (Utils.isCorrectDomain(url, regexUrlFilter)) {
                 rootSite = site;
                 break;
             }
@@ -176,41 +92,77 @@ public class IndexingServiceImpl implements IndexingService {
         return rootSite;
     }
 
-    private IndexingResponse getResponse(boolean result, String error) {
-        IndexingResponse response = new IndexingResponse();
-        response.setResult(result);
-        response.setError(error);
-        return response;
-    }
-
     @Override
-    public IndexingResponseServ indexingPage(String url) {
-        IndexingResponseServ responseServ = new IndexingResponseServ();
-        IndexingResponse response;
+    public IndexingResponseServ startIndexing() {
+        IndexingResponseServ responseServ = null;
+        stopIndexingProcess = false;
         try {
-            stopIndexingProcess = false;
+            List<Site> sitesList = getListForIndexing();
+            if (sitesList.size() > 0) {
+                for (Site site : sitesList) {
+                    new Thread(
+                            new SiteHandler(site, siteRepository, pageRepository, lemmaRepository, indexRepository
+                                    , otherSettings, jsoupConnectConfig
+                                    , this, getLemmaFinder()
+                            )
+                    ).start();
+                }
 
-            Site rootSite = findSite(url);
-            if (rootSite != null) {
-                new Thread(
-                        new PageHandler(rootSite, url, siteRepository, pageRepository, lemmaRepository, indexRepository
-                                , jsoupConnectConfig, otherSettings, this, utils, getLemmaFinder())
-                ).start();
-
-                response = getResponse(true, null);
-                responseServ.setStatus(HttpStatus.OK);
+                responseServ = createResponse(HttpStatus.OK, null);
             } else {
-                response = getResponse(false, otherSettings.getErrorPageLocatedOutsideSites());
-                responseServ.setStatus(HttpStatus.BAD_REQUEST);
+                responseServ = createResponse(HttpStatus.NOT_FOUND, otherSettings.getErrorMessageIsAlreadyStarted());
             }
-
         } catch (Exception e) {
-            response = getResponse(false, e.getLocalizedMessage());
-            responseServ.setStatus(HttpStatus.INTERNAL_SERVER_ERROR);
+            responseServ = createResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getLocalizedMessage());
         }
-        responseServ.setIndexingResponse(response);
 
         return responseServ;
     }
 
+    @Override
+    public IndexingResponseServ stopIndexing() {
+        IndexingResponseServ responseServ = null;
+        try {
+            if (siteRepository.existsByStatus(StatusType.INDEXING)) {
+                stopIndexingProcess = true;
+                responseServ = createResponse(HttpStatus.OK, null);
+            } else {
+                responseServ = createResponse(HttpStatus.NOT_FOUND, otherSettings.getErrorMessageIsNotRunning());
+            }
+        } catch (Exception e) {
+            responseServ = createResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getLocalizedMessage());
+        }
+
+        return responseServ;
+    }
+
+    @Override
+    public IndexingResponseServ indexingPage(String url) {
+        IndexingResponseServ responseServ = null;
+        stopIndexingProcess = false;
+        try {
+            Site site = findSite(url);
+            if (site != null) {
+                new Thread(
+                        new PageHandler(site, url, siteRepository, pageRepository, lemmaRepository, indexRepository
+                                , otherSettings, jsoupConnectConfig
+                                , this, getLemmaFinder()
+                        )
+                ).start();
+
+                responseServ = createResponse(HttpStatus.OK, null);
+            } else {
+                responseServ = createResponse(HttpStatus.BAD_REQUEST, otherSettings.getErrorPageLocatedOutsideSites());
+            }
+        } catch (Exception e) {
+            responseServ = createResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getLocalizedMessage());
+        }
+
+        return responseServ;
+    }
+
+    @Override
+    public boolean isStopIndexingProcess() {
+        return stopIndexingProcess;
+    }
 }

@@ -17,5 +17,4 @@ public class LemmaConfiguration {
     public LuceneMorphology luceneMorphology() throws IOException {
         return new RussianLuceneMorphology();
     }
-
 }

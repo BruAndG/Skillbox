@@ -5,6 +5,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.dao.DataIntegrityViolationException;
 import searchengine.config.JsoupConnectConfig;
 import searchengine.config.OtherSettings;
 import searchengine.model.IndexEntity;
@@ -16,15 +17,14 @@ import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
-import javax.transaction.Transactional;
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.RecursiveAction;
 
 public class GetterSiteMap extends RecursiveAction {
     private final SiteEntity rootSiteEntity;
     private final String nodeUrl;
+    private final StartHandler handler;
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
     private final LemmaRepository lemmaRepository;
@@ -32,27 +32,126 @@ public class GetterSiteMap extends RecursiveAction {
     private final OtherSettings otherSettings;
     private final JsoupConnectConfig jsoupConnectConfig;
     private final IndexingService indexingService;
-    private final StartHandler handler;
     private final LemmaFinder lemmaFinder;
-    private final Utils utils;
 
-    public GetterSiteMap(SiteEntity rootSiteEntity, String nodeUrl
-            , SiteRepository siteRepository, PageRepository pageRepository, LemmaRepository lemmaRepository
-            , IndexRepository indexRepository
-            , JsoupConnectConfig jsoupConnectConfig, OtherSettings otherSettings
-            , IndexingService indexingService, StartHandler handler, LemmaFinder lemmaFinder, Utils utils) {
+    public GetterSiteMap(SiteEntity rootSiteEntity, String nodeUrl, StartHandler handler
+            , SiteRepository siteRepository, PageRepository pageRepository
+            , LemmaRepository lemmaRepository, IndexRepository indexRepository
+            , OtherSettings otherSettings, JsoupConnectConfig jsoupConnectConfig
+            , IndexingService indexingService, LemmaFinder lemmaFinder) {
         this.rootSiteEntity = rootSiteEntity;
         this.nodeUrl = nodeUrl;
+        this.handler = handler;
         this.siteRepository = siteRepository;
         this.pageRepository = pageRepository;
         this.lemmaRepository = lemmaRepository;
         this.indexRepository = indexRepository;
-        this.jsoupConnectConfig = jsoupConnectConfig;
         this.otherSettings = otherSettings;
+        this.jsoupConnectConfig = jsoupConnectConfig;
         this.indexingService = indexingService;
-        this.handler = handler;
         this.lemmaFinder = lemmaFinder;
-        this.utils = utils;
+    }
+
+    private String getPathFromUrl(String url) {
+        if (url == null) {
+            return "/";
+        }
+
+        if (url.startsWith(rootSiteEntity.getUrl())) {
+            String result = url.substring(rootSiteEntity.getUrl().length());
+            if (!result.startsWith("/")) {
+                result = "/" + result;
+            }
+            return result;
+        }
+
+        int index = 0;
+        for (int i = 0; i < 3; i++) {
+            index = url.indexOf('/', index);
+            if (index == -1) {
+                break;
+            }
+            index++;
+        }
+        if (index > -1) {
+            return url.substring(--index);
+        }
+        return "/";
+    }
+
+    private PageEntity findPageEntity(String path) {
+        List<PageEntity> pageEntityList = pageRepository.findByPathAndSiteId(path, rootSiteEntity.getId());
+        for (PageEntity pageEntity : pageEntityList) {
+            return pageEntity;
+        }
+
+        return null;
+    }
+
+    private PageEntity createPageEntity(SiteEntity siteEntity, String path) {
+        PageEntity newPage = new PageEntity();
+
+        newPage.setSiteEntity(siteEntity);
+        newPage.setPath(path);
+
+        return newPage;
+    }
+
+    private void compensationFrequency(PageEntity pageEntity) {
+
+        Optional<PageEntity> optionalPageEntity = pageRepository.findById(pageEntity.getId());
+        if (!optionalPageEntity.isPresent()) {
+            return;
+        }
+        PageEntity refreshPageEntity = optionalPageEntity.get();
+        Set<IndexEntity> indexSet = refreshPageEntity.getIndexes();
+        for (IndexEntity indexEntity : indexSet) {
+            Optional<IndexEntity> optionalIndexEntity = indexRepository.findById(indexEntity.getId());
+            if (optionalIndexEntity.isPresent()) {
+                IndexEntity refreshIndexEntity = optionalIndexEntity.get();
+                LemmaEntity lemmaEntity = refreshIndexEntity.getLemmaEntity();
+                int frequency = lemmaEntity.getFrequency() - 1;
+                if (frequency > 0) {
+                    lemmaEntity.setFrequency(frequency);
+                    lemmaRepository.save(lemmaEntity);
+                } else {
+                    lemmaRepository.delete(lemmaEntity);
+                }
+            }
+        }
+
+    }
+
+    private PageEntity getPageEntity() {
+        String path = getPathFromUrl(nodeUrl);
+        PageEntity pageEntity = findPageEntity(path);
+        if (pageEntity != null) {
+            if (handler.isOunPage()) {
+                compensationFrequency(pageEntity);
+                pageRepository.delete(pageEntity);
+            } else {
+                return null;
+            }
+        }
+
+        PageEntity newPage = createPageEntity(rootSiteEntity, path);
+        try {
+            pageRepository.save(newPage);
+        } catch (DataIntegrityViolationException e) {
+            return null;
+        }
+
+        return newPage;
+    }
+
+    private String transformUrl(String url) {
+        if (url == null) {
+            return null;
+        }
+        if (!url.endsWith("/")) {
+            return url + "/";
+        }
+        return url;
     }
 
     private Connection jsoupConnection() {
@@ -77,40 +176,11 @@ public class GetterSiteMap extends RecursiveAction {
         return connection;
     }
 
-    private String getPathFromUrl(String url) {
-        if (url.startsWith(rootSiteEntity.getUrl())) {
-            String result = url.substring(rootSiteEntity.getUrl().length());
-            if (!result.startsWith("/")) {
-                result = "/" + result;
-            }
-            return result;
-        }
-
-        int index = 0;
-        for (int i = 0; i < 3; i++) {
-            index = url.indexOf('/', index);
-            if (index == -1) {
-                break;
-            }
-            index++;
-        }
-        if (index > -1) {
-            return url.substring(--index);
-        }
-        return "/";
-    }
-
-    private PageEntity getPageEntity(String path) {
-        List<PageEntity> pageEntityList = pageRepository.findByPath(path);
-        for (PageEntity pageEntity : pageEntityList) {
-            if (pageEntity.getSiteEntity().getId() == rootSiteEntity.getId()) {
-                return pageEntity;
-            }
-        }
-        return null;
-    }
-
     private Connection.Response loadHtml(String url) {
+
+        if (url == null) {
+            return null;
+        }
 
         Integer pauseBeforeRequest = otherSettings.getPauseBeforeRequest();
         if (pauseBeforeRequest != null) {
@@ -133,74 +203,86 @@ public class GetterSiteMap extends RecursiveAction {
         return null;
     }
 
-    private PageEntity createPageEntity(SiteEntity siteEntity, String path, int code, String content) {
-        PageEntity newPage = new PageEntity();
+    private Document getAndSaveContent(PageEntity pageEntity) {
+        Connection.Response response = loadHtml(nodeUrl);
 
-        newPage.setSiteEntity(siteEntity);
-        newPage.setPath(path);
-        newPage.setCode(code);
-        newPage.setContent(content);
-
-        return newPage;
-    }
-
-    private void savePage(PageEntity pageEntity) {
-        rootSiteEntity.setStatusTime(LocalDateTime.now());
-        siteRepository.save(rootSiteEntity);
-        pageRepository.save(pageEntity);
-    }
-
-    private void compensationFrequency(PageEntity pageEntity) {
-
-        Optional<PageEntity> optionalPageEntity = pageRepository.findById(pageEntity.getId());
-        if (!optionalPageEntity.isPresent()) {
-            return;
+        if (response == null) {
+            return null;
         }
-        PageEntity refreshPageEntity = optionalPageEntity.get();
-        Set<IndexEntity> indexSet = refreshPageEntity.getIndexes();
-        for (IndexEntity indexEntity : indexSet) {
-            Optional<IndexEntity> optionalIndexEntity = indexRepository.findById(indexEntity.getId());
-            if (optionalIndexEntity.isPresent()) {
-                IndexEntity refreshIndexEntity = optionalIndexEntity.get();
-                LemmaEntity lemmaEntity = refreshIndexEntity.getLemmaEntity();
-                int frequency = lemmaEntity.getFrequency() - 1;
-                if (frequency > 0) {
-                    lemmaEntity.setFrequency(frequency);
-                } else {
-                    lemmaRepository.delete(lemmaEntity);
+
+        String content = response.body();
+        int code = response.statusCode();
+
+        pageEntity.setCode(code);
+        pageEntity.setContent(content);
+        pageRepository.save(pageEntity);
+
+        //rootSiteEntity.setStatusTime(LocalDateTime.now());
+        //siteRepository.save(rootSiteEntity);
+
+        Document document = null;
+        try {
+            document = response.parse();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return document;
+    }
+
+    private boolean isExistsInChild(List<String> nodes, String url) {
+
+        if (url == null) {
+            return true;
+        }
+
+        if (nodes != null) {
+            String transUrl = transformUrl(url);
+            for (String child : nodes) {
+                if ((child != null) && transformUrl(child).equals(transUrl)) {
+                    return true;
                 }
-                lemmaRepository.save(lemmaEntity);
+            }
+        }
+        return false;
+    }
+
+    private List<String> getChildNodes(Document document) {
+        List<String> result = new ArrayList<>();
+
+        String regex = Utils.getRegexToFilterUrl(nodeUrl);
+
+        Elements elements = document.select("a[href]");
+        for (Element element : elements) {
+            String url = element.absUrl("href");
+
+            if ((url != null) && !url.contains("#")
+                    && Utils.isCorrectDomain(url, regex) && !isExistsInChild(result, url)) {
+                result.add(url);
             }
         }
 
-    }
-
-    private void deletePage(PageEntity pageEntity) {
-        compensationFrequency(pageEntity);
-        pageRepository.delete(pageEntity);
+        return result;
     }
 
     private LemmaEntity findByLemma(String lemmaText) {
-        List<LemmaEntity> lemmaList = lemmaRepository.findByLemma(lemmaText);
+        List<LemmaEntity> lemmaList = lemmaRepository.findByLemmaAndSiteId(lemmaText, rootSiteEntity.getId());
         for (LemmaEntity lemmaEntity : lemmaList) {
-            if (lemmaEntity.getSiteEntity().getId() == rootSiteEntity.getId()) {
-                return lemmaEntity;
-            }
+            return lemmaEntity;
         }
+
         return null;
     }
 
     private LemmaEntity createLemmaEntity(SiteEntity siteEntity, String lemmaText) {
         LemmaEntity newLemma = new LemmaEntity();
-
         newLemma.setSiteEntity(siteEntity);
         newLemma.setLemma(lemmaText);
         newLemma.setFrequency(1);
-
         return newLemma;
     }
 
-    private IndexEntity createIndexEntity(PageEntity pageEntity, LemmaEntity lemmaEntity, float rank) {
+    private IndexEntity createIndexEntity(PageEntity pageEntity, LemmaEntity lemmaEntity, int rank) {
         IndexEntity newIndex = new IndexEntity();
         newIndex.setPageEntity(pageEntity);
         newIndex.setLemmaEntity(lemmaEntity);
@@ -211,7 +293,6 @@ public class GetterSiteMap extends RecursiveAction {
     private void parseTextToLemmas(String text, PageEntity pageEntity) {
         Map<String, Integer> lemmas = lemmaFinder.collectLemmas(text);
         for (Map.Entry<String, Integer> lemma : lemmas.entrySet()) {
-
             LemmaEntity lemmaEntity = findByLemma(lemma.getKey());
             if (lemmaEntity == null) {
                 lemmaEntity = createLemmaEntity(rootSiteEntity, lemma.getKey());
@@ -222,108 +303,27 @@ public class GetterSiteMap extends RecursiveAction {
 
             IndexEntity indexEntity = createIndexEntity(pageEntity, lemmaEntity, lemma.getValue());
             indexRepository.save(indexEntity);
-
         }
-    }
-
-    @Transactional
-    private Document getAndSaveHtmlBody() {
-        Document document = null;
-        Connection.Response response;
-        PageEntity newPage;
-        String path = getPathFromUrl(nodeUrl);
-
-        synchronized (rootSiteEntity) {
-
-            PageEntity pageEntity = getPageEntity(path);
-            if (pageEntity != null) {
-                if (handler.isOunPage()) {
-                    synchronized (pageEntity) {
-                        deletePage(pageEntity);
-                    }
-                } else {
-                    return null;
-                }
-            }
-            response = loadHtml(nodeUrl);
-            if (response == null) {
-                return null;
-            }
-
-            String content = response.body();
-            int code = response.statusCode();
-            newPage = createPageEntity(rootSiteEntity, path, code, content);
-            savePage(newPage);
-        }
-
-        try {
-            document = response.parse();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        // индексация страницы
-        synchronized (newPage) {
-            parseTextToLemmas(document.text(), newPage);
-        }
-
-        return document;
-    }
-
-    private String transformUrl(String url) {
-        if (!url.endsWith("/")) {
-            return url + "/";
-        }
-        return url;
-    }
-
-    /*
-    Метод ищет URL в переданном списке
-     */
-    private boolean isExistsInChild(List<String> nodes, String url) {
-        if (nodes != null) {
-            String transUrl = transformUrl(url);
-            for (String child : nodes) {
-                if (transformUrl(child).equals(transUrl)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /*
-    Метод формирует список URL страницы (с фильтром по домену)
-     */
-    private List<String> getChildNodes(Document document) {
-        List<String> result = new ArrayList<>();
-
-        String regex = utils.getRegexToFilterUrl(nodeUrl);
-
-        Elements elements = document.select("a[href]");
-        for (Element element : elements) {
-            String url = element.absUrl("href");
-
-            if (utils.isCorrectDomain(url, regex) && !isExistsInChild(result, url)) {
-                result.add(url);
-            }
-        }
-
-        return result;
     }
 
     @Override
     protected void compute() {
+        if (indexingService.isStopIndexingProcess() || handler.isError()) {
+            return;
+        }
 
         try {
-            if (indexingService.isStopIndexingProcess() || handler.isError()) {
+            PageEntity pageEntity = getPageEntity();
+            if (pageEntity == null) {
                 return;
             }
 
-            Document document = getAndSaveHtmlBody();
+            Document document = getAndSaveContent(pageEntity);
             if (document == null) {
                 return;
             }
+
+            parseTextToLemmas(document.text(), pageEntity);
 
             // если индексируем только одну страницу, то выходим
             if (handler.isOunPage()) {
@@ -334,10 +334,10 @@ public class GetterSiteMap extends RecursiveAction {
             List<RecursiveAction> forks = new ArrayList<>();
             for (String childNode : childNodes) {
                 GetterSiteMap subTask =
-                        new GetterSiteMap(rootSiteEntity, childNode
+                        new GetterSiteMap(rootSiteEntity, childNode, handler
                                 , siteRepository, pageRepository, lemmaRepository, indexRepository
-                                , jsoupConnectConfig, otherSettings
-                                , indexingService, handler, lemmaFinder, utils
+                                , otherSettings, jsoupConnectConfig
+                                , indexingService, lemmaFinder
                         );
                 subTask.fork();
                 forks.add(subTask);
@@ -350,5 +350,6 @@ public class GetterSiteMap extends RecursiveAction {
             handler.setError(true);
             throw new RuntimeException(e);
         }
+
     }
 }
