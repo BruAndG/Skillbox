@@ -110,13 +110,15 @@ public class GetterSiteMap extends RecursiveAction {
             if (optionalIndexEntity.isPresent()) {
                 IndexEntity refreshIndexEntity = optionalIndexEntity.get();
                 LemmaEntity lemmaEntity = refreshIndexEntity.getLemmaEntity();
-                int frequency = lemmaEntity.getFrequency() - 1;
-                if (frequency > 0) {
-                    lemmaEntity.setFrequency(frequency);
-                    lemmaRepository.save(lemmaEntity);
-                } else {
-                    lemmaRepository.delete(lemmaEntity);
-                }
+                lemmaRepository.incFrequencyByLemmaAndSiteId(-1, lemmaEntity.getLemma(), rootSiteEntity.getId());
+                lemmaRepository.deleteLemmaIsFrequencyEqualsZero(lemmaEntity.getLemma(), rootSiteEntity.getId());
+//                int frequency = lemmaEntity.getFrequency() - 1;
+//                if (frequency > 0) {
+//                    lemmaEntity.setFrequency(frequency);
+//                    lemmaRepository.save(lemmaEntity);
+//                } else {
+//                    lemmaRepository.delete(lemmaEntity);
+//                }
             }
         }
 
@@ -290,16 +292,46 @@ public class GetterSiteMap extends RecursiveAction {
         return newIndex;
     }
 
+//    private void parseTextToLemmas(String text, PageEntity pageEntity) {
+//        Map<String, Integer> lemmas = lemmaFinder.collectLemmas(text);
+//        for (Map.Entry<String, Integer> lemma : lemmas.entrySet()) {
+//            LemmaEntity lemmaEntity = findByLemma(lemma.getKey());
+//            if (lemmaEntity == null) {
+//                lemmaEntity = createLemmaEntity(rootSiteEntity, lemma.getKey());
+//            } else {
+//                lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
+//            }
+//            try {
+//                lemmaRepository.save(lemmaEntity);
+//            } catch (DataIntegrityViolationException e) {
+//                lemmaEntity = findByLemma(lemma.getKey());
+//                lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
+//                lemmaRepository.save(lemmaEntity);
+//            }
+//
+//            IndexEntity indexEntity = createIndexEntity(pageEntity, lemmaEntity, lemma.getValue());
+//            indexRepository.save(indexEntity);
+//        }
+//    }
     private void parseTextToLemmas(String text, PageEntity pageEntity) {
         Map<String, Integer> lemmas = lemmaFinder.collectLemmas(text);
         for (Map.Entry<String, Integer> lemma : lemmas.entrySet()) {
             LemmaEntity lemmaEntity = findByLemma(lemma.getKey());
             if (lemmaEntity == null) {
                 lemmaEntity = createLemmaEntity(rootSiteEntity, lemma.getKey());
+                try {
+                    lemmaRepository.save(lemmaEntity);
+                } catch (DataIntegrityViolationException e) {
+                    lemmaRepository.incFrequencyByLemmaAndSiteId(1, lemma.getKey(), rootSiteEntity.getId());
+                    lemmaEntity = findByLemma(lemma.getKey());
+                    //lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
+                    //lemmaRepository.save(lemmaEntity);
+                }
             } else {
-                lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
+                lemmaRepository.incFrequencyByLemmaAndSiteId(1, lemma.getKey(), rootSiteEntity.getId());
+                //lemmaEntity = findByLemma(lemma.getKey()); // ??????????????
+                //lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
             }
-            lemmaRepository.save(lemmaEntity);
 
             IndexEntity indexEntity = createIndexEntity(pageEntity, lemmaEntity, lemma.getValue());
             indexRepository.save(indexEntity);
