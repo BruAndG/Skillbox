@@ -67,7 +67,10 @@ public class LemmaFinder {
                 if (anyWordBaseBelongToParticle(wordBaseForms)) {
                     continue;
                 }
-                lemmaSet.addAll(luceneMorphology.getNormalForms(word));
+                List<String> normalForms = luceneMorphology.getNormalForms(word);
+                String normalWord = normalForms.get(0);
+                lemmaSet.add(normalWord);
+                //lemmaSet.addAll(luceneMorphology.getNormalForms(word));
             }
         }
         return lemmaSet;

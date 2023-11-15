@@ -19,6 +19,7 @@ import searchengine.repositories.SiteRepository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ForkJoinPool;
 
 @Service
 @RequiredArgsConstructor
@@ -83,7 +84,7 @@ public class IndexingServiceImpl implements IndexingService {
         List<Site> sitesList = sites.getSites();
         for (Site site : sitesList) {
             String regexUrlFilter = Utils.getRegexToFilterUrl(site.getUrl());
-            if (Utils.isCorrectDomain(url, regexUrlFilter)) {
+            if (Utils.isCorrectDomain(url, regexUrlFilter) && !url.contains("#") && !Utils.isFile(url)) {
                 rootSite = site;
                 break;
             }
@@ -100,12 +101,13 @@ public class IndexingServiceImpl implements IndexingService {
             List<Site> sitesList = getListForIndexing();
             if (sitesList.size() > 0) {
                 for (Site site : sitesList) {
-                    new Thread(
+                    ForkJoinPool forkJoinPool = ForkJoinPool.commonPool();
+                    forkJoinPool.execute(
                             new SiteHandler(site, siteRepository, pageRepository, lemmaRepository, indexRepository
                                     , otherSettings, jsoupConnectConfig
                                     , this, getLemmaFinder()
                             )
-                    ).start();
+                    );
                 }
 
                 responseServ = createResponse(HttpStatus.OK, null);
@@ -143,12 +145,13 @@ public class IndexingServiceImpl implements IndexingService {
         try {
             Site site = findSite(url);
             if (site != null) {
-                new Thread(
+                ForkJoinPool forkJoinPool = ForkJoinPool.commonPool();
+                forkJoinPool.execute(
                         new PageHandler(site, url, siteRepository, pageRepository, lemmaRepository, indexRepository
                                 , otherSettings, jsoupConnectConfig
                                 , this, getLemmaFinder()
                         )
-                ).start();
+                );
 
                 responseServ = createResponse(HttpStatus.OK, null);
             } else {

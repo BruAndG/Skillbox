@@ -147,23 +147,8 @@ public class SearchingServiceImpl implements SearchingService {
         return lemmasSorted;
     }
 
-    private List<PageEntity> filterPage(Set<LemmaEntity> lemmasSorted) {
-        Iterator<LemmaEntity> iteratorLemmasSorted = lemmasSorted.iterator();
-        LemmaEntity lemmaEntity = iteratorLemmasSorted.next();
-        List<PageEntity> pageEntityList = pageRepository.findByLemma(lemmaEntity.getLemma());
-
-        while (iteratorLemmasSorted.hasNext()) {
-            lemmaEntity = iteratorLemmasSorted.next();
-            for (int i = 0; i < pageEntityList.size(); i++) {
-                PageEntity pageEntity = pageEntityList.get(i);
-                if (pageEntity != null) {
-                    if (pageRepository.countByIdAndLemma(pageEntity.getId(), lemmaEntity.getLemma()) == 0) {
-                        pageEntityList.set(i, null);
-                    }
-                }
-            }
-        }
-
+    private List<PageEntity> filterPage(Set<String> lemmasFromUser) {
+        List<PageEntity> pageEntityList = pageRepository.findByLemmaList(lemmasFromUser, lemmasFromUser.size());
         return pageEntityList;
     }
 
@@ -278,7 +263,7 @@ public class SearchingServiceImpl implements SearchingService {
             if (lemmasSorted.size() == 0) {
                 relevanceList = new ArrayList<>();
             } else {
-                List<PageEntity> pageEntityList = filterPage(lemmasSorted);
+                List<PageEntity> pageEntityList = filterPage(lemmasFromUser);
                 relevanceList = calcAndSortRelevance(pageEntityList, lemmasSorted);
             }
 

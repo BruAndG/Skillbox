@@ -29,4 +29,8 @@ public class Utils {
     public static boolean isCorrectDomain(String url, String regex) {
         return ((regex == null) || url.matches(regex));
     }
+
+    public static boolean isFile(String url) {
+        return url.toLowerCase().matches(".*\\.(jpg|jpeg|png|gif|webp|pdf|eps|xlsx|xls|doc|docx|ppts|icon|bmp)$");
+    }
 }
