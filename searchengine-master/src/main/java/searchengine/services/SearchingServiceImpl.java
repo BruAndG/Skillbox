@@ -6,6 +6,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import searchengine.Application;
 import searchengine.config.OtherSettings;
 import searchengine.dto.searching.SearchingData;
 import searchengine.dto.searching.SearchingResponse;
@@ -271,6 +272,7 @@ public class SearchingServiceImpl implements SearchingService {
             responseServ.setSearchingResponse(response);
             responseServ.setStatus(HttpStatus.OK);
         } catch (Exception e) {
+            Application.log.info(e.getLocalizedMessage());
             SearchingResponse response = formingResponseError(e.getLocalizedMessage());
             responseServ.setSearchingResponse(response);
             responseServ.setStatus(HttpStatus.INTERNAL_SERVER_ERROR);

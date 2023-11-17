@@ -1,5 +1,6 @@
 package searchengine.services;
 
+import searchengine.Application;
 import searchengine.config.JsoupConnectConfig;
 import searchengine.config.OtherSettings;
 import searchengine.config.Site;
@@ -100,7 +101,8 @@ public class SiteHandler implements Runnable, StartHandler {
                 setStatus(siteEntity, StatusType.INDEXED, null);
             }
         } catch (Exception e) {
-            setStatus(siteEntity, StatusType.FAILED, e.getMessage());
+            Application.log.info(e.getLocalizedMessage());
+            setStatus(siteEntity, StatusType.FAILED, e.getLocalizedMessage());
         }
     }
 

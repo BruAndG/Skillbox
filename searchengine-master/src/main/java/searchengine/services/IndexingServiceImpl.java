@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import searchengine.Application;
 import searchengine.config.JsoupConnectConfig;
 import searchengine.config.OtherSettings;
 import searchengine.config.Site;
@@ -115,6 +116,7 @@ public class IndexingServiceImpl implements IndexingService {
                 responseServ = createResponse(HttpStatus.NOT_FOUND, otherSettings.getErrorMessageIsAlreadyStarted());
             }
         } catch (Exception e) {
+            Application.log.info(e.getLocalizedMessage());
             responseServ = createResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getLocalizedMessage());
         }
 
@@ -132,6 +134,7 @@ public class IndexingServiceImpl implements IndexingService {
                 responseServ = createResponse(HttpStatus.NOT_FOUND, otherSettings.getErrorMessageIsNotRunning());
             }
         } catch (Exception e) {
+            Application.log.info(e.getLocalizedMessage());
             responseServ = createResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getLocalizedMessage());
         }
 
@@ -158,6 +161,7 @@ public class IndexingServiceImpl implements IndexingService {
                 responseServ = createResponse(HttpStatus.BAD_REQUEST, otherSettings.getErrorPageLocatedOutsideSites());
             }
         } catch (Exception e) {
+            Application.log.info(e.getLocalizedMessage());
             responseServ = createResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getLocalizedMessage());
         }
 

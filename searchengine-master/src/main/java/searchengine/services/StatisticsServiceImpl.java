@@ -3,6 +3,7 @@ package searchengine.services;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import searchengine.Application;
 import searchengine.dto.statistics.*;
 import searchengine.model.SiteEntity;
 import searchengine.model.StatusType;
@@ -87,6 +88,7 @@ public class StatisticsServiceImpl implements StatisticsService {
             responseServ.setStatisticsResponse(response);
             responseServ.setStatus(HttpStatus.OK);
         } catch (Exception e) {
+            Application.log.info(e.getLocalizedMessage());
             StatisticsResponse response = formingStatisticsError(e.getLocalizedMessage());
             responseServ.setStatisticsResponse(response);
             responseServ.setStatus(HttpStatus.INTERNAL_SERVER_ERROR);

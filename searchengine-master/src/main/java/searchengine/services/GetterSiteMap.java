@@ -6,6 +6,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.dao.DataIntegrityViolationException;
+import searchengine.Application;
 import searchengine.config.JsoupConnectConfig;
 import searchengine.config.OtherSettings;
 import searchengine.model.IndexEntity;
@@ -131,6 +132,7 @@ public class GetterSiteMap extends RecursiveAction {
         try {
             pageRepository.save(newPage);
         } catch (DataIntegrityViolationException e) {
+            Application.log.info(e.getLocalizedMessage());
             return null;
         }
 
@@ -180,6 +182,7 @@ public class GetterSiteMap extends RecursiveAction {
             try {
                 Thread.sleep(pauseBeforeRequest);
             } catch (InterruptedException e) {
+                Application.log.info(e.getLocalizedMessage());
                 return null;
             }
         }
@@ -189,6 +192,7 @@ public class GetterSiteMap extends RecursiveAction {
             Connection.Response response = jsoupConnection.url(url).execute();
             return response;
         } catch (IOException e) {
+            Application.log.info(e.getLocalizedMessage());
             if (transformUrl(url).equals(transformUrl(rootSiteEntity.getUrl()))) {
                 throw new RuntimeException(e);
             }
@@ -217,6 +221,7 @@ public class GetterSiteMap extends RecursiveAction {
         try {
             document = response.parse();
         } catch (IOException e) {
+            Application.log.info(e.getLocalizedMessage());
             throw new RuntimeException(e);
         }
 
@@ -292,6 +297,7 @@ public class GetterSiteMap extends RecursiveAction {
                 try {
                     lemmaRepository.save(lemmaEntity);
                 } catch (DataIntegrityViolationException e) {
+                    Application.log.info(e.getLocalizedMessage());
                     lemmaRepository.incFrequencyByLemmaAndSiteId(1, lemma.getKey(), rootSiteEntity.getId());
                     lemmaEntity = findByLemma(lemma.getKey());
                 }
@@ -345,6 +351,7 @@ public class GetterSiteMap extends RecursiveAction {
             }
 
         } catch (Exception e) {
+            Application.log.info(e.getLocalizedMessage());
             handler.setError(true);
             throw new RuntimeException(e);
         }
